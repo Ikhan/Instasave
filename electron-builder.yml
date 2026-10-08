@@ -1,0 +1,15 @@
+appId: com.imrankhan.instasave
+productName: InstaSave
+directories:
+  buildResources: resources
+  output: release
+files:
+  - out/**/*
+  - package.json
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+  category: public.app-category.utilities
+win:
+  target: nsis

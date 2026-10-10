@@ -1,7 +1,7 @@
 {
   "name": "insta-download",
   "productName": "InstaSave",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Desktop app to download Instagram photos, videos, reels and carousels",
   "main": "./out/main/index.js",
   "author": "Imran Khan",

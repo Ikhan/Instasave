@@ -1,71 +1,21 @@
-import { spawn } from 'node:child_process'
-import { accessSync, constants } from 'node:fs'
 import { chmod, mkdir, rename, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { BrowserName, PostInfo, ToolStatus } from '../shared/types'
-import { downloadToFile, readCapped, safeFetch, sha256File, type FetchPolicy } from './download'
+import { downloadToFile, readCapped, safeFetch, sha256File } from './download'
+import { GITHUB_DOWNLOAD_POLICY as GITHUB_POLICY } from './github'
+import { isExecutable, run } from './process'
 import { parseYtDlpJson } from './parse'
 import { binaryAssetName, buildDownloadArgs, buildInfoArgs, friendlyError, parseChecksum } from './ytdlp-args'
 
 const RELEASE_BASE = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download'
 const INFO_TIMEOUT_MS = 90_000
 const DOWNLOAD_TIMEOUT_MS = 10 * 60_000
-const MAX_OUTPUT_BYTES = 50 * 1024 * 1024
 const VERSION_TIMEOUT_MS = 120_000
-const GITHUB_HOSTS = new Set(['github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com'])
-const GITHUB_POLICY: FetchPolicy = {
-  isAllowed: (url) => {
-    const u = new URL(url)
-    return u.protocol === 'https:' && GITHUB_HOSTS.has(u.hostname)
-  },
-  maxBytes: 200 * 1024 * 1024
-}
-
-function isExecutable(path: string): boolean {
-  try {
-    accessSync(path, constants.X_OK)
-    return true
-  } catch {
-    return false
-  }
-}
-
-interface RunResult {
-  readonly code: number | null
-  readonly stdout: string
-  readonly stderr: string
-}
-
 export interface YtDlp {
   status(): Promise<ToolStatus>
   install(): Promise<ToolStatus>
   fetchPost(url: string, shortcode: string, browser: BrowserName): Promise<PostInfo>
   downloadItem(url: string, browser: BrowserName, index: number, outPath: string): Promise<void>
-}
-
-function run(bin: string, args: readonly string[], timeoutMs: number): Promise<RunResult> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(bin, args, { windowsHide: true })
-    const out: Buffer[] = []
-    const err: Buffer[] = []
-    let size = 0
-    const timer = setTimeout(() => child.kill('SIGKILL'), timeoutMs)
-    const collect = (target: Buffer[]) => (chunk: Buffer) => {
-      size += chunk.length
-      if (size > MAX_OUTPUT_BYTES) child.kill('SIGKILL')
-      else target.push(chunk)
-    }
-    child.stdout.on('data', collect(out))
-    child.stderr.on('data', collect(err))
-    child.on('error', (e) => {
-      clearTimeout(timer)
-      reject(e)
-    })
-    child.on('close', (code) => {
-      clearTimeout(timer)
-      resolve({ code, stdout: Buffer.concat(out).toString('utf8'), stderr: Buffer.concat(err).toString('utf8') })
-    })
-  })
 }
 
 /** Manages a private copy of the standalone yt-dlp binary in the app's data folder. */
@@ -78,7 +28,7 @@ export function createYtDlp(binDir: string, ffmpegPath: string | null): YtDlp {
 
   const readVersion = async (): Promise<string | null> => {
     try {
-      const res = await run(binPath, ['--version'], VERSION_TIMEOUT_MS)
+      const res = await run({ bin: binPath, args: ['--version'] }, VERSION_TIMEOUT_MS)
       return res.code === 0 ? res.stdout.trim() || null : null
     } catch {
       return null
@@ -92,7 +42,7 @@ export function createYtDlp(binDir: string, ffmpegPath: string | null): YtDlp {
     return { installed: true, version: await readVersion(), ffmpegPath }
   }
 
-  const install = async (): Promise<ToolStatus> => {
+  const installOnce = async (): Promise<ToolStatus> => {
     await mkdir(binDir, { recursive: true })
     const asset = binaryAssetName(process.platform)
     const sumsRes = await safeFetch(`${RELEASE_BASE}/SHA2-256SUMS`, GITHUB_POLICY, 60_000)
@@ -117,9 +67,15 @@ export function createYtDlp(binDir: string, ffmpegPath: string | null): YtDlp {
     return { installed: true, version, ffmpegPath }
   }
 
+  let inFlight: Promise<ToolStatus> | null = null
+  const install = (): Promise<ToolStatus> => {
+    inFlight ??= installOnce().finally(() => { inFlight = null })
+    return inFlight
+  }
+
   const fetchPost = async (url: string, shortcode: string, browser: BrowserName): Promise<PostInfo> => {
     ensureInstalled()
-    const res = await run(binPath, buildInfoArgs(url, browser), INFO_TIMEOUT_MS)
+    const res = await run({ bin: binPath, args: buildInfoArgs(url, browser) }, INFO_TIMEOUT_MS)
     if (res.code !== 0 || !res.stdout.trim()) {
       throw new Error(friendlyError(res.stderr || 'Timed out while contacting Instagram.'))
     }
@@ -136,7 +92,7 @@ export function createYtDlp(binDir: string, ffmpegPath: string | null): YtDlp {
 
   const downloadItem = async (url: string, browser: BrowserName, index: number, outPath: string): Promise<void> => {
     ensureInstalled()
-    const res = await run(binPath, buildDownloadArgs(url, browser, index, outPath, ffmpegPath), DOWNLOAD_TIMEOUT_MS)
+    const res = await run({ bin: binPath, args: buildDownloadArgs(url, browser, index, outPath, ffmpegPath) }, DOWNLOAD_TIMEOUT_MS)
     if (res.code !== 0) throw new Error(friendlyError(res.stderr))
   }
 

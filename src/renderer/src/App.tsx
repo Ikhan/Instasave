@@ -3,12 +3,14 @@ import type { ToolStatus } from '../../shared/types'
 import { DownloadView } from './components/DownloadView'
 import { EngineBanner } from './components/EngineBanner'
 import { HistoryView } from './components/HistoryView'
+import { ProfileView } from './components/profile/ProfileView'
 import { SettingsView } from './components/SettingsView'
 
-type Tab = 'download' | 'history' | 'settings'
+type Tab = 'download' | 'profile' | 'history' | 'settings'
 
 const TABS: ReadonlyArray<{ id: Tab; label: string }> = [
   { id: 'download', label: 'Download' },
+  { id: 'profile', label: 'Profile' },
   { id: 'history', label: 'History' },
   { id: 'settings', label: 'Settings' }
 ]
@@ -49,8 +51,9 @@ export function App() {
       </header>
 
       <main className="content">
-        {tool && !tool.installed && <EngineBanner onInstalled={setTool} />}
+        {tool && !tool.installed && tab === 'download' && <EngineBanner onInstalled={setTool} />}
         {tab === 'download' && <DownloadView engineReady={tool?.installed ?? false} />}
+        {tab === 'profile' && <ProfileView onOpenSettings={() => setTab('settings')} />}
         {tab === 'history' && <HistoryView />}
         {tab === 'settings' && <SettingsView tool={tool} onToolChange={setTool} />}
       </main>

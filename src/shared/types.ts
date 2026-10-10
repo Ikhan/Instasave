@@ -61,6 +61,36 @@ export interface ToolStatus {
   readonly ffmpegPath: string | null
 }
 
+export interface ProfileEngineStatus {
+  readonly installed: boolean
+  readonly version: string | null
+  /** 'binary' = official standalone build; 'python' = PyPI package run with system Python (Intel Macs). */
+  readonly mode: 'binary' | 'python'
+  /** Why the engine can't be installed on this computer, if anything. */
+  readonly problem: string | null
+}
+
+export type ProfileStatus = 'running' | 'done' | 'stopped' | 'error'
+
+export interface ProfileProgress {
+  readonly username: string
+  readonly status: ProfileStatus
+  readonly downloaded: number
+  /** Files that already existed on disk and were not downloaded again. */
+  readonly skipped: number
+  readonly lastFile: string | null
+  readonly folder: string
+  readonly error?: string
+}
+
+export interface ProfileInfo {
+  readonly username: string
+  readonly folder: string
+  readonly fileCount: number
+  /** A previous full download finished, so "only new posts" mode is safe. */
+  readonly complete: boolean
+}
+
 export interface InstaApi {
   fetchPost(url: string): Promise<Result<PostInfo>>
   downloadItems(post: PostInfo, itemIds: readonly string[]): Promise<Result<null>>
@@ -74,4 +104,13 @@ export interface InstaApi {
   revealFile(filePath: string): Promise<void>
   toolStatus(): Promise<ToolStatus>
   installTool(): Promise<Result<ToolStatus>>
+  profileEngineStatus(): Promise<ProfileEngineStatus>
+  installProfileEngine(): Promise<Result<ProfileEngineStatus>>
+  profileInfo(input: string): Promise<Result<ProfileInfo>>
+  startProfile(input: string, quick: boolean): Promise<Result<null>>
+  stopProfile(): Promise<void>
+  /** Latest progress of the running (or most recent) profile download, if any. */
+  currentProfile(): Promise<ProfileProgress | null>
+  openProfileFolder(username: string): Promise<void>
+  onProfileProgress(listener: (p: ProfileProgress) => void): () => void
 }

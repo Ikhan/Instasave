@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import type { DownloadProgress, InstaApi } from '../shared/types'
+import type { DownloadProgress, InstaApi, ProfileProgress } from '../shared/types'
 
 const api: InstaApi = {
   fetchPost: (url) => ipcRenderer.invoke('post:fetch', url),
@@ -17,7 +17,19 @@ const api: InstaApi = {
   clearHistory: () => ipcRenderer.invoke('history:clear'),
   revealFile: (filePath) => ipcRenderer.invoke('file:reveal', filePath),
   toolStatus: () => ipcRenderer.invoke('tool:status'),
-  installTool: () => ipcRenderer.invoke('tool:install')
+  installTool: () => ipcRenderer.invoke('tool:install'),
+  profileEngineStatus: () => ipcRenderer.invoke('profile:engineStatus'),
+  installProfileEngine: () => ipcRenderer.invoke('profile:installEngine'),
+  profileInfo: (input) => ipcRenderer.invoke('profile:info', input),
+  startProfile: (input, quick) => ipcRenderer.invoke('profile:start', input, quick),
+  stopProfile: () => ipcRenderer.invoke('profile:stop'),
+  currentProfile: () => ipcRenderer.invoke('profile:current'),
+  openProfileFolder: (username) => ipcRenderer.invoke('profile:openFolder', username),
+  onProfileProgress: (listener) => {
+    const handler = (_e: IpcRendererEvent, p: ProfileProgress): void => listener(p)
+    ipcRenderer.on('profile:progress', handler)
+    return () => ipcRenderer.removeListener('profile:progress', handler)
+  }
 }
 
 contextBridge.exposeInMainWorld('insta', api)

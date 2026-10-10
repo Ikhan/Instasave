@@ -1,7 +1,9 @@
 import { join } from 'node:path'
 import { app, BrowserWindow, shell } from 'electron'
 import { defaultSearchDirs, findFfmpeg } from './ffmpeg'
+import { createGalleryDl } from './gallerydl'
 import { registerIpc } from './ipc'
+import { registerProfileIpc, stopProfileJob } from './ipc-profile'
 import { createStore } from './store'
 import { createYtDlp } from './ytdlp'
 
@@ -48,10 +50,13 @@ app.whenReady().then(() => {
   const ytdlp = createYtDlp(join(dataDir, 'bin'), ffmpegPath)
   const win = createWindow()
   registerIpc(win, store, ytdlp, ffmpegPath !== null)
+  registerProfileIpc(win, store, createGalleryDl({ dataDir, platform: process.platform, arch: process.arch }))
 })
 
 app.on('web-contents-created', (_e, contents) => {
   contents.on('will-attach-webview', (event) => event.preventDefault())
 })
+
+app.on('before-quit', () => stopProfileJob(true))
 
 app.on('window-all-closed', () => app.quit())
